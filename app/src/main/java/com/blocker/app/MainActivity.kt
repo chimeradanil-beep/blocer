@@ -1,6 +1,7 @@
 package com.blocker.app
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -77,6 +78,31 @@ class MainActivity : Activity() {
         return enabled.contains("$packageName/")
     }
 
+    private fun openServiceSettings() {
+        val flat = ComponentName(this, BlockerService::class.java).flattenToString()
+        // 1) Сразу на страницу службы «Блокировщик приложений»
+        try {
+            val i = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            i.putExtra("android.intent.extra.COMPONENT_NAME", flat)
+            startActivity(i)
+            return
+        } catch (e: Exception) {
+        }
+        // 2) Список специальных возможностей с подсветкой нашей службы
+        try {
+            val args = Bundle()
+            args.putString(":settings:fragment_args_key", flat)
+            val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            i.putExtra(":settings:fragment_args_key", flat)
+            i.putExtra(":settings:show_fragment_args", args)
+            startActivity(i)
+            return
+        } catch (e: Exception) {
+        }
+        // 3) Обычные настройки специальных возможностей
+        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
     private fun updateCounter() {
         val n = rows.count { it.sw.isChecked }
         counter.text = "Заблокировано: $n"
@@ -145,9 +171,7 @@ class MainActivity : Activity() {
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(matchParent, dp(48)).apply { topMargin = dp(14) }
-            setOnClickListener {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
+            setOnClickListener { openServiceSettings() }
         }
         statusCard.addView(actionBtn)
         root.addView(statusCard)
