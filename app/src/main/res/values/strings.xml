@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="service_description">Следит за открытием выбранных приложений и сразу закрывает их, возвращая на главный экран.</string>
+</resources>
