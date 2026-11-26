@@ -2,16 +2,25 @@ package com.blocker.app
 
 import android.app.Activity
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextUtils
+import android.text.TextWatcher
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.CheckBox
+import android.view.WindowInsetsController
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 
 class MainActivity : Activity() {
@@ -25,10 +34,31 @@ class MainActivity : Activity() {
         )
     }
 
-    private lateinit var status: TextView
-    private lateinit var permButton: Button
+    private val BG = Color.parseColor("#0E1013")
+    private val CARD = Color.parseColor("#1A1D23")
+    private val TEXT = Color.parseColor("#F2F4F8")
+    private val MUTED = Color.parseColor("#8B93A1")
+    private val GREEN = Color.parseColor("#2ECC71")
+    private val RED = Color.parseColor("#FF5A5F")
+    private val ACCENT = Color.parseColor("#6C5CE7")
+    private val GRAY_BTN = Color.parseColor("#2B2F38")
+
+    private class Row(val view: View, val label: String, val sw: Switch)
+
+    private val rows = ArrayList<Row>()
+    private lateinit var counter: TextView
+    private lateinit var dot: View
+    private lateinit var statusTitle: TextView
+    private lateinit var statusSub: TextView
+    private lateinit var actionBtn: TextView
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun rounded(color: Int, radiusDp: Int): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radiusDp).toFloat()
+        }
 
     private fun blockedSet(): MutableSet<String> {
         val p = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -47,47 +77,125 @@ class MainActivity : Activity() {
         return enabled.contains("$packageName/")
     }
 
+    private fun updateCounter() {
+        val n = rows.count { it.sw.isChecked }
+        counter.text = "Заблокировано: $n"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = BG
+        window.navigationBarColor = BG
+
+        val matchParent = ViewGroup.LayoutParams.MATCH_PARENT
+        val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(32), dp(16), dp(8))
+            setBackgroundColor(BG)
+            setPadding(dp(20), dp(24), dp(20), 0)
         }
 
+        // Заголовок
         root.addView(TextView(this).apply {
-            text = "Блокировщик приложений"
-            textSize = 22f
-            setTextColor(Color.BLACK)
+            text = "Блокировщик"
+            textSize = 30f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(TEXT)
+        })
+        root.addView(TextView(this).apply {
+            text = "Закрывает выбранные приложения при запуске"
+            textSize = 14f
+            setTextColor(MUTED)
+            setPadding(0, dp(2), 0, dp(18))
         })
 
-        status = TextView(this).apply {
-            textSize = 15f
-            setPadding(0, dp(8), 0, dp(8))
+        // Карточка статуса
+        val statusCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(CARD, 20)
+            setPadding(dp(18), dp(16), dp(18), dp(16))
         }
-        root.addView(status)
+        val statusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        dot = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(12), dp(12)).apply { rightMargin = dp(10) }
+        }
+        statusTitle = TextView(this).apply {
+            textSize = 18f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(TEXT)
+        }
+        statusRow.addView(dot)
+        statusRow.addView(statusTitle)
+        statusCard.addView(statusRow)
 
-        permButton = Button(this).apply {
-            text = "Выдать разрешение"
+        statusSub = TextView(this).apply {
+            textSize = 13f
+            setTextColor(MUTED)
+            setPadding(0, dp(6), 0, 0)
+        }
+        statusCard.addView(statusSub)
+
+        actionBtn = TextView(this).apply {
+            gravity = Gravity.CENTER
+            textSize = 15f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(matchParent, dp(48)).apply { topMargin = dp(14) }
             setOnClickListener {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             }
         }
-        root.addView(permButton)
+        statusCard.addView(actionBtn)
+        root.addView(statusCard)
 
-        root.addView(TextView(this).apply {
-            text = "Отметьте приложения, которые нужно блокировать:"
+        // Счётчик
+        counter = TextView(this).apply {
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(MUTED)
+            setPadding(dp(4), dp(22), 0, dp(8))
+        }
+        root.addView(counter)
+
+        // Поиск
+        val search = EditText(this).apply {
+            hint = "Поиск приложения"
+            setHintTextColor(MUTED)
+            setTextColor(TEXT)
             textSize = 15f
-            setPadding(0, dp(16), 0, dp(8))
-        })
+            isSingleLine = true
+            background = rounded(CARD, 14)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            layoutParams = LinearLayout.LayoutParams(matchParent, wrap).apply { bottomMargin = dp(12) }
+        }
+        root.addView(search)
 
-        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val scroll = ScrollView(this).apply { addView(list) }
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
-        )
+        // Список приложений
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, dp(16))
+        }
+        val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            addView(list)
+        }
+        root.addView(scroll, LinearLayout.LayoutParams(matchParent, 0, 1f))
         setContentView(root)
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.insetsController?.setSystemBarsAppearance(
+                0,
+                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = 0
+        }
 
         val blocked = blockedSet()
         val pm = packageManager
@@ -95,48 +203,87 @@ class MainActivity : Activity() {
         val apps = pm.queryIntentActivities(launcher, 0)
             .filter { it.activityInfo.packageName != packageName }
             .distinctBy { it.activityInfo.packageName }
-            .sortedBy { it.loadLabel(pm).toString().lowercase() }
+            .sortedWith(
+                compareBy({ it.activityInfo.packageName !in blocked },
+                    { it.loadLabel(pm).toString().lowercase() })
+            )
+
+        val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
 
         for (ri in apps) {
             val pkg = ri.activityInfo.packageName
-            val row = LinearLayout(this).apply {
+            val label = ri.loadLabel(pm).toString()
+
+            val card = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(6), 0, dp(6))
+                background = rounded(CARD, 16)
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                layoutParams = LinearLayout.LayoutParams(matchParent, wrap).apply { bottomMargin = dp(8) }
             }
-            row.addView(ImageView(this).apply {
+            val icon = ImageView(this).apply {
                 setImageDrawable(ri.loadIcon(pm))
-                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
-            })
-            row.addView(TextView(this).apply {
-                text = ri.loadLabel(pm).toString()
+                layoutParams = LinearLayout.LayoutParams(dp(42), dp(42))
+            }
+            val name = TextView(this).apply {
+                text = label
                 textSize = 16f
-                setTextColor(Color.BLACK)
-                setPadding(dp(12), 0, dp(8), 0)
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            row.addView(CheckBox(this).apply {
+                setTextColor(TEXT)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(dp(14), 0, dp(10), 0)
+                layoutParams = LinearLayout.LayoutParams(0, wrap, 1f)
+            }
+            val sw = Switch(this).apply {
+                thumbTintList = ColorStateList(states, intArrayOf(Color.WHITE, Color.parseColor("#B0B6C0")))
+                trackTintList = ColorStateList(states, intArrayOf(RED, Color.parseColor("#3A3F4A")))
                 isChecked = pkg in blocked
                 setOnCheckedChangeListener { _, checked ->
                     val s = blockedSet()
                     if (checked) s.add(pkg) else s.remove(pkg)
                     saveBlocked(s)
+                    updateCounter()
                 }
-            })
-            list.addView(row)
+            }
+            card.setOnClickListener { sw.toggle() }
+            card.addView(icon)
+            card.addView(name)
+            card.addView(sw)
+            list.addView(card)
+            rows.add(Row(card, label, sw))
         }
+        updateCounter()
+
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val q = s?.toString()?.trim()?.lowercase() ?: ""
+                for (r in rows) {
+                    r.view.visibility =
+                        if (q.isEmpty() || r.label.lowercase().contains(q)) View.VISIBLE else View.GONE
+                }
+            }
+        })
     }
 
     override fun onResume() {
         super.onResume()
-        if (serviceEnabled()) {
-            status.text = "Защита включена ✅"
-            status.setTextColor(Color.rgb(0, 128, 0))
-            permButton.text = "Настройки разрешения"
+        val on = serviceEnabled()
+        dot.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(if (on) GREEN else RED)
+        }
+        if (on) {
+            statusTitle.text = "Защита включена"
+            statusSub.text = "Отмеченные приложения будут закрываться сразу при запуске"
+            actionBtn.text = "Настройки разрешения"
+            actionBtn.background = rounded(GRAY_BTN, 14)
         } else {
-            status.text = "Защита выключена. Нажмите кнопку, найдите «Блокировщик приложений» и включите."
-            status.setTextColor(Color.rgb(200, 0, 0))
-            permButton.text = "Выдать разрешение"
+            statusTitle.text = "Защита выключена"
+            statusSub.text = "Нажмите кнопку и включите «Блокировщик приложений» в специальных возможностях"
+            actionBtn.text = "Выдать разрешение"
+            actionBtn.background = rounded(ACCENT, 14)
         }
     }
 }
